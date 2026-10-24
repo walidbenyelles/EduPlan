@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+{% block title %}Emploi du temps{% endblock %}
+{% block page_title %}Emploi du Temps{% endblock %}
+{% block page_sub %}{% if formation %}{{ formation.nom }}{% endif %}{% endblock %}
+
+{% block head %}
+<link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css' rel='stylesheet' />
+<style>
+  /* ── Sélecteur de vue principale ── */
+  .vue-selector {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .vue-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 2px solid #e2e8f0;
+    background: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    color: #64748b;
+    cursor: pointer;
+    transition: all .18s;
+    white-space: nowrap;
+  }
+  .vue-btn:hover { border-color: #a5b4fc; color: #4f46e5; background: #f5f3ff; }
+  .vue-btn.active-promo { border-color: #4f46e5; background: #4f46e5; color: #fff; }
+  .vue-btn.active-td    { border-color: #0891b2; background: #0891b2; color: #fff; }
+  .vue-btn .dot {
+    width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0;
+  }
+  .vue-divider { width: 1px; height: 24px; background: #e2e8f0; margin: 0 4px; }
+  .vue-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #94a3b8; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% if not formation %}
+<div class="alert alert-warning">
+  <i class="bi bi-exclamation-triangle-fill me-2"></i>
+  Aucune formation sélectionnée. <a href="{{ url_for('admin.formation') }}">Créer une formation</a>
+</div>
+{% else %}
+
+<!-- ── Barre d'outils principale ──────────────────────────────── -->
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-3">
+
+  <!-- Sélecteur de vue : Promo / Groupe TD -->
+  <div class="vue-selector">
+    <span class="vue-label">Vue :</span>
+
+    <!-- Toute la promo -->
+    <button class="vue-btn active-promo" id="btn-promo" onclick="setVuePromo()">
+      <i class="bi bi-people-fill"></i> Toute la promo
+    </button>
+
+    <div class="vue-divider"></div>
+    <span class="vue-label">Par groupe :</span>
+
+    <!-- Un bouton par groupe TD -->
+    {% for g in formation.groupes_td %}
+    <button class="vue-btn" id="btn-{{ g }}" onclick="setVueTD('{{ g }}')">
+      <span class="dot"></span> {{ g }}
+      <small style="opacity:.75;font-size:11px;">
+        + {{ formation.groupes_tp_of_td(g) | join(', ') }}
+      </small>
+    </button>
+    {% endfor %}
+  </div>
+
+  <!-- Outils droite -->
+  <div class="d-flex gap-2 align-items-center flex-wrap">
+    <!-- Filtre module -->
+    <select id="filtreModule" class="form-select form-select-sm" style="width:auto;">
+      <option value="">Tous les modules</option>
+      {% for m in modules_liste %}
+      <option value="{{ m.id }}">{{ m.code }}</option>
+      {% endfor %}
+    </select>
+
+    <!-- Vue calendrier tabs -->
+    <div class="cal-tabs">
+      <button class="cal-tab" onclick="switchView('dayGridMonth')">Mois</button>
+      <button class="cal-tab active" onclick="switchView('timeGridWeek')">Semaine</button>
+      <button class="cal-tab" onclick="switchView('timeGridDay')">Jour</button>
+      <button class="cal-tab" onclick="switchView('listWeek')">Liste</button>
+    </div>
+
+    <a href="{{ url_for('admin.seances') }}" class="btn btn-sm btn-outline-primary d-print-none">
+      <i class="bi bi-plus-circle me-1"></i> Séances
+    </a>
+    <button class="btn btn-sm btn-outline-secondary d-print-none" onclick="window.print()">
+      <i class="bi bi-printer"></i>
+    </button>
+  </div>
+</div>
+
+<!-- ── Info légende groupes ──────────────────────────────────── -->
+<div id="legend-bar" class="d-flex gap-2 flex-wrap align-items-center mb-3" style="font-size:13px;">
+  <span class="badge" style="background:#4f46e5;">CM — Promo</span>
+  {% for g in formation.groupes_td %}
+  <span class="badge" style="background:#0891b2;">TD : {{ g }}</span>
+  {% for tp in formation.groupes_tp_of_td(g) %}
+  <span class="badge" style="background:#059669;">TP : {{ tp }}</span>
+  {% endfor %}
+  <span style="color:#94a3b8;font-size:11px;margin-left:4px;">↑ couleur par type de séance</span>
+  {% endfor %}
+</div>
+
+<!-- ── Calendrier ────────────────────────────────────────────── -->
+<div id="gcal-wrapper">
+  <div id="calendar"></div>
+</div>
+
+{% endif %}
+<div id="cal-tooltip"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
+{% if formation %}
+<script>
+  const TYPE_COLORS  = { CM: '#4f46e5', TD: '#0891b2', TP: '#059669' };
+  const API_URL      = '{{ url_for("admin.api_events") }}';
+  const tooltip      = document.getElementById('cal-tooltip');
+
+  // État courant
+  let currentVueTD = '';   // '' = toute la promo, 'TD1' = vue groupe
+
+  // ── FullCalendar ───────────────────────────────────────────
+  const calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
+    initialView: 'timeGridWeek',
+    locale: 'fr', firstDay: 1, nowIndicator: true, allDaySlot: false,
+    slotMinTime: '07:30:00', slotMaxTime: '20:30:00',
+    slotDuration: '00:30:00', slotLabelInterval: '01:00:00',
+    expandRows: true, height: 720,
+    businessHours: { daysOfWeek:[1,2,3,4,5], startTime:'08:00', endTime:'18:30' },
+    headerToolbar: { left:'prev,next today', center:'title', right:'' },
+    buttonText: { today:"Aujourd'hui" },
+    dayHeaderFormat: { weekday:'short', day:'numeric' },
+    slotLabelFormat:  { hour:'2-digit', minute:'2-digit', hour12:false },
+    eventTimeFormat:  { hour:'2-digit', minute:'2-digit', hour12:false },
+
+    events: function(info, successCb, failureCb) {
+      const params = new URLSearchParams();
+      if (currentVueTD) {
+        params.append('vue_td', currentVueTD);
+      }
+      const m = document.getElementById('filtreModule').value;
+      if (m) params.append('module_id', m);
+      
+      const url = params.toString() ? API_URL + '?' + params.toString() : API_URL;
+      fetch(url).then(r => r.json()).then(successCb).catch(failureCb);
+    },
+
+    eventDidMount: function(info) {
+      const color = TYPE_COLORS[info.event.extendedProps.type_seance] || '#6b7280';
+      info.el.style.backgroundColor = color;
+      info.el.style.borderLeftColor  = color;
+    },
+
+    eventContent: function(arg) {
+      const p = arg.event.extendedProps;
+      return { html: `<div style="padding:2px 4px;">
+        <div style="font-size:11px;font-weight:700;">${arg.timeText}</div>
+        <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+          <span style="opacity:.75;">[${p.type_seance}]</span> ${p.module_code}
+        </div>
+        <div style="font-size:11px;opacity:.85;">${p.groupe} · ${p.enseignant_nom}</div>
+        ${p.salle ? `<div style="font-size:10px;opacity:.7;"><i class="bi bi-door-open"></i> ${p.salle}</div>` : ''}
+      </div>` };
+    },
+
+    eventMouseEnter: function(info) {
+      const p = info.event.extendedProps;
+      const color = TYPE_COLORS[p.type_seance] || '#6b7280';
+      const fmt = t => t ? t.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'}) : '';
+      tooltip.innerHTML = `
+        <span class="tt-badge" style="background:${color}">${p.type_seance}</span>
+        <div class="tt-title">${p.module}</div>
+        <div class="tt-row"><i class="bi bi-clock"></i>${fmt(info.event.start)} → ${fmt(info.event.end)}</div>
+        <div class="tt-row"><i class="bi bi-people-fill"></i>${p.groupe}</div>
+        ${p.salle ? `<div class="tt-row"><i class="bi bi-door-open"></i>${p.salle}</div>` : ''}
+        <div class="tt-row"><i class="bi bi-person-fill"></i>${p.enseignant}</div>`;
+      tooltip.style.display = 'block';
+      positionTooltip(info.jsEvent);
+    },
+    eventMouseLeave: () => { tooltip.style.display = 'none'; },
+    eventClick:      info => info.jsEvent.preventDefault(),
+  });
+
+  calendar.render();
+
+  // ── Tooltip ────────────────────────────────────────────────
+  document.addEventListener('mousemove', e => {
+    if (tooltip.style.display === 'block') positionTooltip(e);
+  });
+  function positionTooltip(e) {
+    let x = e.clientX + 16, y = e.clientY + 16;
+    if (x + 280 > window.innerWidth)  x = e.clientX - 288;
+    if (y + 160 > window.innerHeight) y = e.clientY - 168;
+    tooltip.style.left = x + 'px'; tooltip.style.top = y + 'px';
+  }
+
+  // ── Switcher de vue ────────────────────────────────────────
+  function setVuePromo() {
+    currentVueTD = '';
+    // UI : bouton promo actif, désactiver les TD
+    document.getElementById('btn-promo').classList.add('active-promo');
+    document.querySelectorAll('[id^="btn-TD"]').forEach(b => b.classList.remove('active-td'));
+    calendar.refetchEvents();
+  }
+
+  function setVueTD(groupe) {
+    currentVueTD = groupe;
+    // UI
+    document.getElementById('btn-promo').classList.remove('active-promo');
+    document.querySelectorAll('[id^="btn-TD"]').forEach(b => b.classList.remove('active-td'));
+    document.getElementById('btn-' + groupe).classList.add('active-td');
+    calendar.refetchEvents();
+  }
+
+  // Filtre module (maintenant pour toutes les vues)
+  document.getElementById('filtreModule').addEventListener('change', () => {
+    calendar.refetchEvents();
+  });
+
+  // Switcher de vue calendrier
+  function switchView(view) {
+    calendar.changeView(view);
+    const labels = { dayGridMonth:'Mois', timeGridWeek:'Semaine', timeGridDay:'Jour', listWeek:'Liste' };
+    document.querySelectorAll('.cal-tab').forEach(t => {
+      t.classList.toggle('active', t.textContent.trim() === (labels[view] || view));
+    });
+  }
+</script>
+{% endif %}
+{% endblock %}

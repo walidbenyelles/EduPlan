@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Formation{% endblock %}
+{% block page_title %}Formations{% endblock %}
+{% block page_sub %}Gérez vos formations et leurs groupes{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+
+  <!-- ── Formulaire modifier la formation active ─── -->
+  <div class="col-lg-5">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span><i class="bi bi-building me-2"></i>
+          <strong>{% if formation %}Modifier{% else %}Créer{% endif %}</strong></span>
+        <a href="{{ url_for('admin.formation_new') }}" class="btn btn-sm btn-outline-primary">
+          <i class="bi bi-plus-circle me-1"></i> Nouvelle formation
+        </a>
+      </div>
+      <div class="card-body">
+        {% if not formation %}
+        <div class="alert alert-info mb-3">
+          <i class="bi bi-info-circle me-1"></i> Aucune formation. Créez-en une pour commencer.
+        </div>
+        {% endif %}
+        <form method="POST" novalidate>
+          {{ form.hidden_tag() }}
+          <div class="mb-3">
+            {{ form.nom.label(class="form-label fw-semibold") }}
+            {{ form.nom(class="form-control" + (" is-invalid" if form.nom.errors else ""),
+                        placeholder="Ex: BUT Informatique 2ème Année") }}
+            {% for e in form.nom.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-12">
+              {{ form.nb_groupes.label(class="form-label fw-semibold") }}
+              {{ form.nb_groupes(class="form-control" + (" is-invalid" if form.nb_groupes.errors else ""), min=1, max=20) }}
+              {% for e in form.nb_groupes.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-save me-1"></i> Enregistrer
+          </button>
+        </form>
+      </div>
+    </div>
+
+    {% if formation %}
+    <!-- Aperçu groupes -->
+    <div class="card shadow-sm mt-3">
+      <div class="card-header"><i class="bi bi-diagram-3 me-2"></i><strong>Groupes actifs</strong></div>
+      <div class="card-body">
+        <div class="mb-2"><strong class="small text-muted text-uppercase" style="letter-spacing:.06em;">Groupes</strong><br>
+          {% for g in formation.groupes %}
+          <span class="badge bg-cyan-soft text-cyan-700 me-1 mb-1">{{ g }}</span>
+          {% endfor %}
+        </div>
+        <div class="mt-2 text-muted small"><i class="bi bi-info-circle me-1"></i>CM → groupe « Promo » (toute la promotion).</div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ── Liste de toutes les formations ──────────── -->
+  <div class="col-lg-7">
+    <div class="card shadow-sm">
+      <div class="card-header">
+        <i class="bi bi-list-ul me-2"></i><strong>Toutes les formations</strong>
+        <span class="badge bg-primary ms-2">{{ formations|length }}</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr><th>Nom</th><th class="text-center">Groupes</th><th>Statut</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for f in formations %}
+            <tr {% if formation and f.id == formation.id %}class="table-primary"{% endif %}>
+              <td class="fw-semibold">{{ f.nom }}</td>
+              <td class="text-center"><span class="badge bg-cyan-soft text-cyan-700">{{ f.nb_groupes }}</span></td>
+              <td>
+                {% if formation and f.id == formation.id %}
+                <span class="badge bg-primary"><i class="bi bi-check2 me-1"></i>Active</span>
+                {% else %}
+                <form method="POST" action="{{ url_for('admin.set_formation') }}" class="d-inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="formation_id" value="{{ f.id }}">
+                  <input type="hidden" name="next" value="{{ url_for('admin.formation') }}">
+                  <button type="submit" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-arrow-right-circle me-1"></i>Sélectionner
+                  </button>
+                </form>
+                {% endif %}
+              </td>
+              <td>
+                {% if not (formation and f.id == formation.id) %}
+                <form method="POST" action="{{ url_for('admin.formation_delete', fid=f.id) }}"
+                      onsubmit="return confirm('Supprimer la formation « {{ f.nom }} » et tous ses modules ?')">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                </form>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="text-center text-muted py-4">Aucune formation créée.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

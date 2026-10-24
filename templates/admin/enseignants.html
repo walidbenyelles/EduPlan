@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Enseignants{% endblock %}
+{% block page_title %}Gestion des Enseignants{% endblock %}
+{% block page_sub %}Enregistrez les intervenants de la formation{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card shadow-sm sticky-top" style="top:20px;">
+      <div class="card-header"><i class="bi bi-person-plus me-2"></i><strong>Ajouter un enseignant</strong></div>
+      <div class="card-body">
+        <form method="POST" novalidate>
+          {{ form.hidden_tag() }}
+          <div class="mb-3">
+            {{ form.prenom.label(class="form-label fw-semibold") }}
+            {{ form.prenom(class="form-control" + (" is-invalid" if form.prenom.errors else ""), placeholder="Prénom") }}
+            {% for e in form.prenom.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+          </div>
+          <div class="mb-3">
+            {{ form.nom.label(class="form-label fw-semibold") }}
+            {{ form.nom(class="form-control" + (" is-invalid" if form.nom.errors else ""), placeholder="NOM") }}
+            {% for e in form.nom.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+          </div>
+          <div class="mb-3">
+            {{ form.email.label(class="form-label fw-semibold") }}
+            {{ form.email(class="form-control", placeholder="email@univ.fr") }}
+          </div>
+          <button type="submit" class="btn btn-primary w-100">
+            <i class="bi bi-plus-lg me-1"></i> Ajouter
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span><i class="bi bi-people-fill me-2"></i><strong>Intervenants</strong>
+          <span class="badge bg-primary ms-2">{{ enseignants|length }}</span></span>
+        
+        <div class="d-flex gap-2 align-items-center ms-auto">
+          <input type="text" id="searchEnseignant" class="form-control form-control-sm" placeholder="Rechercher..." style="width:160px;">
+          <select id="sortEnseignant" class="form-select form-select-sm" style="width:auto;">
+            <option value="alpha">Tri A-Z</option>
+            <option value="recent">Dernier ajout</option>
+          </select>
+          <a href="{{ url_for('admin.affectations') }}" class="btn btn-sm btn-outline-primary ms-2">
+            <i class="bi bi-person-lines-fill me-1"></i> Gérer les affectations
+          </a>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 table-paginate" id="enseignantsTable">
+          <thead class="table-light">
+            <tr><th>Enseignant</th><th>Email</th><th>Modules affectés</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for e in enseignants %}
+            <tr data-id="{{ e.id }}" data-name="{{ e.nom_complet|lower }}">
+              <td>
+                <div class="d-flex align-items-center gap-2">
+                  <div class="avatar-circle">{{ e.prenom[0] }}{{ e.nom[0] }}</div>
+                  <div>
+                    <div class="fw-semibold">{{ e.nom_complet }}</div>
+                  </div>
+                </div>
+              </td>
+              <td><small class="text-muted">{{ e.email or '—' }}</small></td>
+              <td>
+                {% for aff in e.affectations %}
+                <span class="badge bg-primary-soft text-primary me-1">{{ aff.module.code }}</span>
+                {% else %}<span class="text-muted small">Aucune affectation</span>
+                {% endfor %}
+              </td>
+              <td>
+                <form method="POST" action="{{ url_for('admin.enseignant_delete', eid=e.id) }}"
+                      onsubmit="return confirm('Supprimer cet enseignant ?')">
+                  {{ form.hidden_tag() }}
+                  <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr class="no-paginate empty-state"><td colspan="4" class="text-center text-muted py-5">
+              <i class="bi bi-people fs-2 d-block mb-2"></i>Aucun enseignant enregistré.
+            </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const searchInput = document.getElementById('searchEnseignant');
+  const sortSelect = document.getElementById('sortEnseignant');
+  const table = document.getElementById('enseignantsTable');
+  if (!table) return;
+  const tbody = table.querySelector('tbody');
+  
+  function applyFilters() {
+    const term = searchInput.value.toLowerCase();
+    const sort = sortSelect.value;
+    
+    let rows = Array.from(tbody.querySelectorAll('tr:not(.no-paginate)'));
+    
+    // Sort
+    rows.sort((a, b) => {
+      if (sort === 'alpha') {
+        return a.dataset.name.localeCompare(b.dataset.name);
+      } else if (sort === 'recent') {
+        return parseInt(b.dataset.id) - parseInt(a.dataset.id);
+      }
+      return 0;
+    });
+    
+    // Re-append to change DOM order
+    rows.forEach(r => tbody.appendChild(r));
+    
+    // Search filter
+    let found = false;
+    rows.forEach(r => {
+      if (r.dataset.name.includes(term)) {
+        r.dataset.filtered = 'false';
+        found = true;
+      } else {
+        r.dataset.filtered = 'true';
+      }
+    });
+    
+    // Manage empty state
+    let emptyRow = tbody.querySelector('.no-paginate.empty-state');
+    if (!found && rows.length > 0) {
+      if (!emptyRow) {
+        emptyRow = document.createElement('tr');
+        emptyRow.className = 'no-paginate empty-state';
+        emptyRow.innerHTML = '<td colspan="4" class="text-center text-muted py-4">Aucun résultat pour cette recherche.</td>';
+        tbody.appendChild(emptyRow);
+      }
+      emptyRow.style.display = '';
+    } else if (emptyRow) {
+      emptyRow.style.display = 'none';
+    }
+    
+    // Trigger pagination update
+    if (table.updatePagination) table.updatePagination();
+  }
+
+  searchInput.addEventListener('input', applyFilters);
+  sortSelect.addEventListener('change', applyFilters);
+});
+</script>
+{% endblock %}

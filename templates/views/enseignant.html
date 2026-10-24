@@ -1,0 +1,306 @@
+{% extends 'base.html' %}
+{% block title %}Vue Enseignant{% endblock %}
+
+{% block head %}
+<link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css' rel='stylesheet' />
+<style>
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .filter-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #94a3b8;
+    white-space: nowrap;
+  }
+
+  .filter-select {
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 20px;
+    border: 2px solid #e2e8f0;
+    padding: 5px 14px;
+    background: #fff;
+    color: #374151;
+    cursor: pointer;
+    transition: border-color .18s;
+    appearance: auto;
+  }
+
+  .filter-select:focus {
+    border-color: #059669;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(5,150,105,.1);
+  }
+
+  .filter-divider {
+    width: 1px;
+    height: 28px;
+    background: #e2e8f0;
+    margin: 0 2px;
+  }
+
+  .vue-selector {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .vue-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 2px solid #e2e8f0;
+    background: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    color: #64748b;
+    cursor: pointer;
+    transition: all .18s;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  .vue-btn:hover { border-color: #a5b4fc; color: #4f46e5; background: #f5f3ff; }
+  .vue-btn.active-promo { border-color: #059669; background: #059669; color: #fff; }
+  .vue-btn.active-td { border-color: #0891b2; background: #0891b2; color: #fff; }
+  .vue-btn .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+  .vue-divider { width: 1px; height: 24px; background: #e2e8f0; margin: 0 4px; }
+  .vue-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #94a3b8; }
+
+  .service-card {
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 16px;
+  }
+
+  @media print {
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    @page { size: landscape; margin: 0.5cm; }
+    .container { max-width: 100% !important; width: 100% !important; padding: 0 !important; margin: 0 !important; }
+    #calendar { height: 600px !important; max-height: 600px !important; }
+    .fc-scroller { overflow: hidden !important; }
+  }
+</style>
+{% endblock %}
+
+{% block view_content %}
+<!-- En-tête -->
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h1 class="fw-bold mb-1" style="font-size:1.6rem;">
+      <i class="bi bi-person-workspace me-2" style="color:#059669;"></i>Mon Service
+    </h1>
+    <p class="text-muted mb-0 small">Emploi du temps par enseignant</p>
+  </div>
+  {% if enseignant %}<button onclick="window.print()" class="btn btn-outline-dark btn-sm d-print-none">
+    <i class="bi bi-printer me-1"></i> Imprimer
+  </button>{% endif %}
+</div>
+
+<!-- Barre de filtres principale -->
+<div class="card shadow-sm mb-4 d-print-none">
+  <div class="card-body py-3">
+    <div class="filter-bar">
+
+      <!-- Affichage enseignant connecté -->
+      <span class="filter-label">Intervenant :</span>
+      <span class="badge bg-primary fs-6">{{ enseignant.nom_complet }}</span>
+
+      <div class="filter-divider"></div>
+
+      <!-- Sélecteur de formation -->
+      <span class="filter-label">Formation :</span>
+      <select id="selectFormation" class="filter-select" onchange="changeFormation(this.value)">
+        <option value="all" {% if selected_formation_id == 'all' %}selected{% endif %}>Toutes les formations</option>
+        {% for f in formations %}
+        <option value="{{ f.id }}" {% if selected_formation_id|string == f.id|string %}selected{% endif %}>
+          {{ f.nom }}
+        </option>
+        {% endfor %}
+      </select>
+
+    </div>
+  </div>
+</div>
+
+{% if enseignant %}
+
+<!-- Impression header -->
+<div class="d-none d-print-block mb-4 text-center">
+  <h1 class="fw-bold">EtuPlan — Service Enseignant</h1>
+  <p class="fw-bold fs-5">{{ enseignant.nom_complet }}</p>
+</div>
+
+<!-- État du service -->
+{% if affectations %}
+<details class="mb-4" id="service-details">
+  <summary class="btn btn-outline-secondary btn-sm d-print-none" style="list-style:none;cursor:pointer;">
+    <i class="bi bi-bar-chart-fill me-1 text-success"></i> Voir l'état du service — {{ enseignant.nom_complet }}
+  </summary>
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-bar-chart-fill text-success"></i>
+    <strong>État du service — {{ enseignant.nom_complet }}</strong>
+  </div>
+  <div class="card-body">
+    <div class="row g-3">
+      {% for a in affectations %}
+      <div class="col-md-6 col-xl-4">
+        <div class="service-card h-100">
+          <div class="d-flex align-items-center gap-2 mb-3">
+            <span class="badge bg-indigo">{{ a.module.code }}</span>
+            <span class="fw-semibold" style="font-size:13px;">{{ a.module.libelle }}</span>
+            <span class="badge bg-secondary ms-auto" style="font-size:10px;">{{ a.module.formation.nom[:20] }}</span>
+          </div>
+          {% for t, attrib in [('CM', a.h_cm_attribuees), ('TD', a.h_td_attribuees), ('TP', a.h_tp_attribuees)] %}
+          {% if attrib > 0 %}
+          {% set pct = a.pct_service(t) %}
+          <div class="mb-2">
+            <div class="d-flex justify-content-between mb-1">
+              <span class="badge type-badge-{{ t }}">{{ t }}</span>
+              <span class="small fw-semibold">{{ a.heures_effectuees(t) }}h / {{ attrib }}h</span>
+            </div>
+            <div class="progress" style="height:8px;border-radius:4px;">
+              <div class="progress-bar {% if t=='CM' %}bg-indigo{% elif t=='TD' %}bg-info{% else %}bg-success{% endif %}"
+                style="width:{{ pct }}%;border-radius:4px;"></div>
+            </div>
+            <div class="d-flex justify-content-between mt-1">
+              <small class="text-muted">{{ pct }}%</small>
+              {% if pct >= 100 %}<span class="badge bg-success badge-sm">Complet</span>
+              {% elif pct > 0 %}<span class="badge bg-primary-soft text-primary badge-sm">En cours</span>
+              {% else %}<span class="badge bg-secondary-soft text-muted badge-sm">Non débuté</span>{% endif %}
+            </div>
+          </div>
+          {% endif %}{% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+{% endif %}
+
+<!-- Barre calendrier -->
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2 d-print-none">
+  <div class="d-flex align-items-center gap-2">
+    <span style="width:36px;height:36px;border-radius:50%;background:rgba(5,150,105,.1);color:#059669;font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;">
+      {{ enseignant.prenom[0] }}{{ enseignant.nom[0] }}
+    </span>
+    <span class="fw-semibold">{{ enseignant.nom_complet }}</span>
+    <span class="text-muted small">— {{ seances|length }} séance(s)</span>
+    {% if selected_formation_id == 'all' %}
+    <span class="badge" style="background:#6366f1;">Toutes les formations</span>
+    {% endif %}
+  </div>
+  <div class="cal-tabs">
+    <button class="cal-tab" onclick="switchView('dayGridMonth')">Mois</button>
+    <button class="cal-tab active" onclick="switchView('timeGridWeek')">Semaine</button>
+    <button class="cal-tab" onclick="switchView('timeGridDay')">Jour</button>
+    <button class="cal-tab" onclick="switchView('listWeek')">Liste</button>
+  </div>
+</div>
+
+<!-- Calendrier -->
+<div id="gcal-wrapper" class="mb-4" data-events-url="{{ events_url }}"
+  data-first-date="{{ seances[0].date.isoformat() if seances else '' }}">
+  <div id="calendar" style="min-height:640px;"></div>
+</div>
+
+{% else %}
+<div class="text-center py-5 text-muted">
+  <i class="bi bi-hand-index-fill fs-1 d-block mb-3" style="color:#cbd5e1;"></i>
+  <p class="fs-5">Sélectionnez un enseignant pour afficher son service.</p>
+</div>
+{% endif %}
+<div id="cal-tooltip"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
+<script>
+  function changeFormation(fid) {
+    window.location.href = '?formation_filter=' + fid;
+  }
+
+  (function () {
+    var wrapper = document.getElementById('gcal-wrapper');
+    if (!wrapper) return;
+    var eventsUrl = wrapper.getAttribute('data-events-url');
+    var firstDate = wrapper.getAttribute('data-first-date');
+    var COLORS = { CM: '#4f46e5', TD: '#0891b2', TP: '#059669' };
+    var tooltip = document.getElementById('cal-tooltip');
+
+    var cal = new FullCalendar.Calendar(document.getElementById('calendar'), {
+      initialView: 'timeGridWeek',
+      initialDate: firstDate || new Date(),
+      locale: 'fr', firstDay: 1, nowIndicator: true, allDaySlot: false,
+      slotMinTime: '07:30:00', slotMaxTime: '20:30:00', slotDuration: '00:30:00',
+      slotLabelInterval: '01:00:00', expandRows: true, height: 640,
+      businessHours: { daysOfWeek: [1, 2, 3, 4, 5], startTime: '08:00', endTime: '18:30' },
+      headerToolbar: { left: 'prev,next today', center: 'title', right: '' },
+      buttonText: { today: "Aujourd'hui" },
+      dayHeaderFormat: { weekday: 'short', day: 'numeric' },
+      slotLabelFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+      eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+      events: eventsUrl,
+      eventDidMount: function (i) {
+        var c = COLORS[i.event.extendedProps.type_seance] || '#6b7280';
+        i.el.style.backgroundColor = c; i.el.style.borderColor = c;
+      },
+      eventContent: function (a) {
+        var p = a.event.extendedProps;
+        return {
+          html: '<div style="padding:3px 5px;overflow:hidden;">'
+            + '<div style="font-size:11px;font-weight:700;">' + a.timeText + '</div>'
+            + '<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
+            + '<span style="opacity:.75">[' + (p.type_seance || '') + ']</span> ' + (p.module_code || '')
+            + '</div><div style="font-size:11px;opacity:.85;">' + (p.groupe || '') + '</div>'
+            + (p.salle ? '<div style="font-size:10px;opacity:.7;"><i class="bi bi-door-open"></i> ' + p.salle + '</div>' : '')
+            + (p.formation ? '<div style="font-size:10px;opacity:.6;">' + p.formation + '</div>' : '')
+            + '</div>'
+        };
+      },
+      eventMouseEnter: function (i) {
+        var p = i.event.extendedProps;
+        var c = COLORS[p.type_seance] || '#6b7280';
+        var fmt = function (t) { return t ? t.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : ''; };
+        if (tooltip) {
+          tooltip.innerHTML = '<span class="tt-badge" style="background:' + c + '">' + (p.type_seance || '') + '</span>'
+            + '<div class="tt-title">' + (p.module || '') + '</div>'
+            + '<div class="tt-row"><i class="bi bi-clock"></i>' + fmt(i.event.start) + ' → ' + fmt(i.event.end) + '</div>'
+            + '<div class="tt-row"><i class="bi bi-people-fill"></i>' + (p.groupe || '') + '</div>'
+            + (p.salle ? '<div class="tt-row"><i class="bi bi-door-open"></i>' + p.salle + '</div>' : '')
+            + (p.formation ? '<div class="tt-row"><i class="bi bi-building"></i>' + p.formation + '</div>' : '');
+          tooltip.style.display = 'block';
+        }
+      },
+      eventMouseLeave: function () { if (tooltip) tooltip.style.display = 'none'; },
+      eventClick: function (i) { i.jsEvent.preventDefault(); }
+    });
+    cal.render();
+
+    document.addEventListener('mousemove', function (e) {
+      if (!tooltip || tooltip.style.display !== 'block') return;
+      var x = e.clientX + 16, y = e.clientY + 16;
+      if (x + 280 > window.innerWidth) x = e.clientX - 288;
+      if (y + 160 > window.innerHeight) y = e.clientY - 168;
+      tooltip.style.left = x + 'px'; tooltip.style.top = y + 'px';
+    });
+    window.switchView = function (v) {
+      cal.changeView(v);
+      var L = { dayGridMonth: 'Mois', timeGridWeek: 'Semaine', timeGridDay: 'Jour', listWeek: 'Liste' };
+      document.querySelectorAll('.cal-tab').forEach(function (t) {
+        t.classList.toggle('active', t.textContent.trim() === (L[v] || v));
+      });
+    };
+  })();
+</script>
+{% endblock %}

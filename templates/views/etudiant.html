@@ -1,0 +1,288 @@
+{% extends 'base.html' %}
+{% block title %}Mon Emploi du Temps{% endblock %}
+
+{% block head %}
+<link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css' rel='stylesheet' />
+<style>
+  .vue-selector {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .vue-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 2px solid #e2e8f0;
+    background: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    color: #64748b;
+    cursor: pointer;
+    transition: all .18s;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  .vue-btn:hover {
+    border-color: #a5b4fc;
+    color: #4f46e5;
+    background: #f5f3ff;
+  }
+
+  .vue-btn.active-promo {
+    border-color: #4f46e5;
+    background: #4f46e5;
+    color: #fff;
+  }
+
+  .vue-btn.active-td {
+    border-color: #0891b2;
+    background: #0891b2;
+    color: #fff;
+  }
+
+  .vue-btn .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+  }
+
+  .vue-divider {
+    width: 1px;
+    height: 24px;
+    background: #e2e8f0;
+    margin: 0 4px;
+  }
+
+  .vue-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #94a3b8;
+  }
+
+  @media print {
+    /* Forcer le navigateur à imprimer les couleurs de fond */
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
+    }
+
+    @page { 
+      size: landscape; 
+      margin: 0.5cm;
+    }
+    
+    .container {
+      max-width: 100% !important;
+      width: 100% !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+
+    /* Force le calendrier à mesurer exactement 600px de haut lors de l'impression, 
+       ce qui correspond parfaitement à la hauteur d'une feuille A4 en Paysage */
+    #calendar {
+      height: 600px !important;
+      max-height: 600px !important;
+    }
+    .fc-scroller {
+      overflow: hidden !important;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block view_content %}
+<!-- En-tête -->
+<div class="d-flex justify-content-between align-items-start mb-4 d-print-none">
+  <div>
+    <h1 class="fw-bold mb-1" style="font-size:1.6rem;">
+      <i class="bi bi-person-badge-fill me-2" style="color:#4f46e5;"></i>Mon Emploi du Temps
+    </h1>
+    {% if formation %}<p class="text-muted mb-0">{{ formation.nom }}</p>{% endif %}
+  </div>
+  {% if current_vue %}<button onclick="window.print()" class="btn btn-outline-dark btn-sm d-print-none">
+    <i class="bi bi-printer me-1"></i> Imprimer / PDF
+  </button>{% endif %}
+</div>
+
+{% if not formation %}
+<div class="alert alert-info">Aucune formation disponible.</div>
+{% else %}
+
+<!-- ── Sélecteur de vue ─────────────────────────────────────── -->
+<div class="card shadow-sm mb-4 d-print-none">
+  <div class="card-body py-3">
+    <div class="d-flex flex-wrap gap-3 align-items-center">
+
+      <!-- Choisir la formation -->
+      <form method="POST" action="{{ url_for('views.set_formation') }}" class="d-flex align-items-center gap-2 mb-0">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <span class="vue-label">Formation :</span>
+        <select name="formation_id" class="form-select form-select-sm" style="width:auto;max-width:250px;border-radius:20px;font-weight:600;cursor:pointer;" onchange="this.form.submit()">
+          {% for f in formations %}
+          <option value="{{ f.id }}" {% if formation and formation.id == f.id %}selected{% endif %}>{{ f.nom }}</option>
+          {% endfor %}
+        </select>
+      </form>
+
+      <div class="vue-divider"></div>
+
+      <!-- Choisir le groupe -->
+      <div class="vue-selector">
+        <span class="vue-label">Groupe :</span>
+        <a href="?vue=promo" class="vue-btn {% if current_vue == 'promo' %}active-promo{% endif %}">
+          <i class="bi bi-people-fill"></i> Toute la promo
+        </a>
+
+        {% for g in formation.groupes %}
+        <a href="?vue={{ g }}" class="vue-btn {% if current_vue == g %}active-td{% endif %}">
+          <span class="dot"></span> {{ g }}
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Impression header -->
+<div class="d-none d-print-block mb-4 text-center">
+  <h1 class="fw-bold">EtuPlan — Emploi du Temps</h1>
+  {% if formation %}<p class="text-muted">{{ formation.nom }}</p>{% endif %}
+  {% if current_vue and current_vue != 'promo' %}
+  <p class="fw-bold fs-5">Groupe : <span class="badge bg-primary">{{ current_vue }}</span>
+    (inclut les CM Promo)</p>
+  {% else %}
+  <p class="fw-bold fs-5">Vue : Toute la promotion</p>
+  {% endif %}
+</div>
+
+{% if current_vue %}
+<!-- Barre de contrôle calendrier -->
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2 d-print-none">
+  <div class="d-flex align-items-center gap-2">
+    {% if current_vue == 'promo' %}
+    <span class="badge fs-6 px-3 py-2 bg-primary">Toute la promo</span>
+    {% else %}
+    <span class="badge fs-6 px-3 py-2" style="background:#0891b2;">{{ current_vue }}</span>
+    <span class="text-muted small">
+      + CM (Promotion)
+    </span>
+    {% endif %}
+    <span class="text-muted small">— {{ seances|length }} séance(s)</span>
+  </div>
+  <div class="cal-tabs">
+    <button class="cal-tab" onclick="switchView('dayGridMonth')">Mois</button>
+    <button class="cal-tab active" onclick="switchView('timeGridWeek')">Semaine</button>
+    <button class="cal-tab" onclick="switchView('timeGridDay')">Jour</button>
+    <button class="cal-tab" onclick="switchView('listWeek')">Liste</button>
+  </div>
+</div>
+
+<!-- Calendrier -->
+<div id="gcal-wrapper" class="mb-4" data-events-url="{{ events_url }}"
+  data-first-date="{{ seances[0].date.isoformat() if seances else '' }}">
+  <div id="calendar" style="min-height:640px;"></div>
+</div>
+
+
+
+{% else %}
+<!-- Aucune vue sélectionnée -->
+<div class="text-center py-5 text-muted">
+  <i class="bi bi-hand-index-fill fs-1 d-block mb-3" style="color:#cbd5e1;"></i>
+  <p class="fs-5">Sélectionnez votre groupe ou "Toute la promo" pour afficher l'emploi du temps.</p>
+</div>
+{% endif %}
+
+{% endif %}
+<div id="cal-tooltip"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
+<script>
+  (function () {
+    var wrapper = document.getElementById('gcal-wrapper');
+    if (!wrapper) return;
+    var eventsUrl = wrapper.getAttribute('data-events-url');
+    var firstDate = wrapper.getAttribute('data-first-date');
+    var COLORS = { CM: '#4f46e5', TD: '#0891b2', TP: '#059669' };
+    var tooltip = document.getElementById('cal-tooltip');
+
+    var cal = new FullCalendar.Calendar(document.getElementById('calendar'), {
+      initialView: 'timeGridWeek',
+      initialDate: firstDate || new Date(),
+      locale: 'fr', firstDay: 1, nowIndicator: true, allDaySlot: false,
+      slotMinTime: '07:30:00', slotMaxTime: '20:30:00', slotDuration: '00:30:00',
+      slotLabelInterval: '01:00:00', expandRows: true, height: 640,
+      businessHours: { daysOfWeek: [1, 2, 3, 4, 5], startTime: '08:00', endTime: '18:30' },
+      headerToolbar: { left: 'prev,next today', center: 'title', right: '' },
+      buttonText: { today: "Aujourd'hui" },
+      dayHeaderFormat: { weekday: 'short', day: 'numeric' },
+      slotLabelFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+      eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+      events: eventsUrl,
+      eventDidMount: function (i) {
+        var c = COLORS[i.event.extendedProps.type_seance] || '#6b7280';
+        i.el.style.backgroundColor = c; i.el.style.borderColor = c;
+      },
+      eventContent: function (a) {
+        var p = a.event.extendedProps;
+        return {
+          html: '<div style="padding:3px 5px;overflow:hidden;">'
+            + '<div style="font-size:11px;font-weight:700;">' + a.timeText + '</div>'
+            + '<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
+            + '<span style="opacity:.75">[' + (p.type_seance || '') + ']</span> ' + (p.module_code || '')
+            + '</div><div style="font-size:11px;opacity:.85;">' + (p.groupe || '') + '</div>'
+            + (p.salle ? '<div style="font-size:10px;opacity:.7;"><i class="bi bi-door-open"></i> ' + p.salle + '</div>' : '')
+            + '</div>'
+        };
+      },
+      eventMouseEnter: function (i) {
+        var p = i.event.extendedProps;
+        var c = COLORS[p.type_seance] || '#6b7280';
+        var fmt = function (t) { return t ? t.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : ''; };
+        if (tooltip) {
+          tooltip.innerHTML = '<span class="tt-badge" style="background:' + c + '">' + (p.type_seance || '') + '</span>'
+            + '<div class="tt-title">' + (p.module || '') + '</div>'
+            + '<div class="tt-row"><i class="bi bi-clock"></i>' + fmt(i.event.start) + ' → ' + fmt(i.event.end) + '</div>'
+            + '<div class="tt-row"><i class="bi bi-people-fill"></i>' + (p.groupe || '') + '</div>'
+            + (p.salle ? '<div class="tt-row"><i class="bi bi-door-open"></i>' + p.salle + '</div>' : '')
+            + '<div class="tt-row"><i class="bi bi-person-fill"></i>' + (p.enseignant || '') + '</div>';
+          tooltip.style.display = 'block';
+        }
+      },
+      eventMouseLeave: function () { if (tooltip) tooltip.style.display = 'none'; },
+      eventClick: function (i) { i.jsEvent.preventDefault(); }
+    });
+    cal.render();
+
+    document.addEventListener('mousemove', function (e) {
+      if (!tooltip || tooltip.style.display !== 'block') return;
+      var x = e.clientX + 16, y = e.clientY + 16;
+      if (x + 280 > window.innerWidth) x = e.clientX - 288;
+      if (y + 160 > window.innerHeight) y = e.clientY - 168;
+      tooltip.style.left = x + 'px'; tooltip.style.top = y + 'px';
+    });
+    window.switchView = function (v) {
+      cal.changeView(v);
+      var L = { dayGridMonth: 'Mois', timeGridWeek: 'Semaine', timeGridDay: 'Jour', listWeek: 'Liste' };
+      document.querySelectorAll('.cal-tab').forEach(function (t) {
+        t.classList.toggle('active', t.textContent.trim() === (L[v] || v));
+      });
+    };
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}Modules{% endblock %}
+{% block page_title %}Gestion de la Maquette{% endblock %}
+{% block page_sub %}Définissez les modules et leurs volumes horaires de référence{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <!-- Formulaire ajout -->
+  <div class="col-lg-4">
+    <div class="card shadow-sm sticky-top" style="top:20px;">
+      <div class="card-header"><i class="bi bi-plus-circle me-2"></i><strong>Ajouter un module</strong></div>
+      <div class="card-body">
+        <form method="POST" novalidate>
+          {{ form.hidden_tag() }}
+          <div class="mb-3">
+            {{ form.code.label(class="form-label fw-semibold") }}
+            {{ form.code(class="form-control" + (" is-invalid" if form.code.errors else ""), placeholder="Ex: INF301") }}
+            {% for e in form.code.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+          </div>
+          <div class="mb-3">
+            {{ form.libelle.label(class="form-label fw-semibold") }}
+            {{ form.libelle(class="form-control" + (" is-invalid" if form.libelle.errors else ""), placeholder="Ex: Algorithmique Avancée") }}
+            {% for e in form.libelle.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+          </div>
+          <div class="mb-2 p-2 rounded bg-light">
+            <div class="small fw-semibold text-muted mb-2">Volumes horaires prévus</div>
+            <div class="row g-2">
+              <div class="col-4">
+                <label class="form-label small mb-1">CM (h)</label>
+                {{ form.h_cm_prevues(class="form-control form-control-sm", placeholder="0") }}
+              </div>
+              <div class="col-4">
+                <label class="form-label small mb-1">TD (h)</label>
+                {{ form.h_td_prevues(class="form-control form-control-sm", placeholder="0") }}
+              </div>
+              <div class="col-4">
+                <label class="form-label small mb-1">TP (h)</label>
+                {{ form.h_tp_prevues(class="form-control form-control-sm", placeholder="0") }}
+              </div>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary w-100 mt-3">
+            <i class="bi bi-plus-lg me-1"></i> Ajouter
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Liste des modules -->
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span><i class="bi bi-journals me-2"></i><strong>Modules de la maquette</strong>
+          <span class="badge bg-primary ms-2" id="moduleCount">{{ modules|length }}</span></span>
+        
+        <div class="d-flex gap-2 align-items-center ms-auto">
+          <input type="text" id="searchModule" class="form-control form-control-sm" placeholder="Rechercher..." style="width:160px;">
+          <select id="sortModule" class="form-select form-select-sm" style="width:auto;">
+            <option value="recent">Dernier ajout</option>
+            <option value="alpha">Ordre alphabétique (Libellé)</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 table-paginate" id="moduleTable">
+          <thead class="table-light">
+            <tr>
+              <th>Code</th><th>Module</th>
+              <th class="text-center" style="min-width:130px;">CM</th>
+              <th class="text-center" style="min-width:130px;">TD</th>
+              <th class="text-center" style="min-width:130px;">TP</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in modules %}
+            <tr data-id="{{ m.id }}" data-name="{{ m.libelle|lower }}" data-search="{{ m.code|lower }} {{ m.libelle|lower }}" class="{% if m.has_alert() %}table-danger-soft{% endif %}">
+              <td><span class="badge bg-indigo">{{ m.code }}</span></td>
+              <td>
+                <div class="fw-semibold">{{ m.libelle }}</div>
+                {% if m.has_alert() %}
+                <span class="badge bg-danger badge-sm"><i class="bi bi-exclamation-triangle-fill me-1"></i>Dépassement</span>
+                {% endif %}
+              </td>
+              {% for t, prevues in [('CM', m.h_cm_prevues), ('TD', m.h_td_prevues), ('TP', m.h_tp_prevues)] %}
+              <td class="text-center">
+                {% if prevues > 0 %}
+                <div class="small text-muted mb-1">{{ m.heures_planifiees(t) }}h / {{ prevues }}h</div>
+                <div class="progress mx-auto" style="height:8px;width:100px;">
+                  <div class="progress-bar bg-{{ m.statut_type(t) }}" style="width:{{ m.pct_type(t) }}%"
+                       title="{{ m.pct_type(t) }}%"></div>
+                </div>
+                <div class="small mt-1">
+                  <span class="badge bg-{{ m.statut_type(t) }}-soft text-{{ m.statut_type(t) }}-700">{{ m.pct_type(t) }}%</span>
+                </div>
+                {% else %}
+                <span class="text-muted small">—</span>
+                {% endif %}
+              </td>
+              {% endfor %}
+              <td>
+                <div class="d-flex gap-1">
+                  <a href="{{ url_for('admin.module_edit', mid=m.id) }}" class="btn btn-sm btn-outline-secondary" title="Modifier">
+                    <i class="bi bi-pencil"></i>
+                  </a>
+                  <form method="POST" action="{{ url_for('admin.module_delete', mid=m.id) }}"
+                        onsubmit="return confirm('Supprimer ce module et toutes ses séances ?')">
+                    {{ form.hidden_tag() }}
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Supprimer">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% else %}
+            <tr class="no-paginate empty-state"><td colspan="6" class="text-center text-muted py-5">
+              <i class="bi bi-journals fs-2 d-block mb-2"></i>
+              Aucun module. Utilisez le formulaire pour en ajouter.
+            </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const modSearch = document.getElementById('searchModule');
+  const modSort = document.getElementById('sortModule');
+  const modTable = document.getElementById('moduleTable');
+
+  if (modTable) {
+    const tbody = modTable.querySelector('tbody');
+    
+    function applyModFilters() {
+      const term = modSearch.value.toLowerCase();
+      const sort = modSort.value;
+      const rows = Array.from(tbody.querySelectorAll('tr:not(.no-paginate)'));
+      
+      // Tri
+      rows.sort((a, b) => {
+        if (sort === 'recent') {
+          return parseInt(b.dataset.id) - parseInt(a.dataset.id);
+        } else if (sort === 'alpha') {
+          return a.dataset.name.localeCompare(b.dataset.name);
+        }
+        return 0;
+      });
+      
+      rows.forEach(r => tbody.appendChild(r));
+      
+      // Filtrage
+      let visibleTotal = 0;
+      rows.forEach(r => {
+        const text = r.dataset.search;
+        if (text.includes(term)) {
+          r.dataset.filtered = 'false';
+          visibleTotal++;
+        } else {
+          r.dataset.filtered = 'true';
+        }
+      });
+      
+      // État vide
+      let emptyRow = tbody.querySelector('.no-paginate.empty-state');
+      if (visibleTotal === 0 && rows.length > 0) {
+        if (!emptyRow) {
+          emptyRow = document.createElement('tr');
+          emptyRow.className = 'no-paginate empty-state';
+          emptyRow.innerHTML = '<td colspan="6" class="text-center text-muted py-4">Aucun résultat.</td>';
+          tbody.appendChild(emptyRow);
+        }
+        emptyRow.style.display = '';
+      } else if (emptyRow) {
+        emptyRow.style.display = 'none';
+      }
+      
+      const moduleCount = document.getElementById('moduleCount');
+      if (moduleCount) moduleCount.textContent = visibleTotal;
+      if (modTable.updatePagination) modTable.updatePagination();
+    }
+    
+    modSearch.addEventListener('input', applyModFilters);
+    modSort.addEventListener('change', applyModFilters);
+  }
+});
+</script>
+{% endblock %}

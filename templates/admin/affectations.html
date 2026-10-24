@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Affectations{% endblock %}
+{% block page_title %}Affectations des Services{% endblock %}
+{% block page_sub %}Attribuez les heures d'enseignement aux intervenants{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <div class="col-lg-5">
+    <div class="card shadow-sm sticky-top" style="top:20px;">
+      <div class="card-header"><i class="bi bi-person-lines-fill me-2"></i><strong>Créer / Modifier une affectation</strong></div>
+      <div class="card-body">
+        <form method="POST" novalidate>
+          {{ form.hidden_tag() }}
+          <div class="mb-3">
+            {{ form.enseignant_id.label(class="form-label fw-semibold") }}
+            {{ form.enseignant_id(class="form-select" + (" is-invalid" if form.enseignant_id.errors else "")) }}
+          </div>
+          <div class="mb-3">
+            {{ form.module_id.label(class="form-label fw-semibold") }}
+            {{ form.module_id(class="form-select" + (" is-invalid" if form.module_id.errors else "")) }}
+          </div>
+          <div class="p-2 bg-light rounded mb-3">
+            <div class="small fw-semibold text-muted mb-2">Heures attribuées</div>
+            <div class="row g-2">
+              <div class="col-4">
+                <label class="form-label small mb-1">CM (h)</label>
+                {{ form.h_cm_attribuees(class="form-control form-control-sm", placeholder="0") }}
+              </div>
+              <div class="col-4">
+                <label class="form-label small mb-1">TD (h)</label>
+                {{ form.h_td_attribuees(class="form-control form-control-sm", placeholder="0") }}
+              </div>
+              <div class="col-4">
+                <label class="form-label small mb-1">TP (h)</label>
+                {{ form.h_tp_attribuees(class="form-control form-control-sm", placeholder="0") }}
+              </div>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">
+            <i class="bi bi-save me-1"></i> Enregistrer l'affectation
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span><i class="bi bi-table me-2"></i><strong>Affectations existantes</strong>
+          <span class="badge bg-primary ms-2" id="affCount">{{ affectations|length }}</span></span>
+        
+        <div class="d-flex gap-2 align-items-center ms-auto">
+          <input type="text" id="searchAff" class="form-control form-control-sm" placeholder="Rechercher..." style="width:160px;">
+          <select id="sortAff" class="form-select form-select-sm" style="width:auto;">
+            <option value="recent">Dernier ajout</option>
+            <option value="alpha">Ordre alphabétique (Prof)</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 table-paginate" id="affTable">
+          <thead class="table-light">
+            <tr>
+              <th>Enseignant</th><th>Module</th>
+              <th class="text-center">CM</th>
+              <th class="text-center">TD</th>
+              <th class="text-center">TP</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in affectations %}
+            <tr data-id="{{ a.id }}" data-name="{{ a.enseignant.nom_complet|lower }}" data-search="{{ a.enseignant.nom_complet|lower }} {{ a.module.code|lower }} {{ a.module.libelle|lower }}">
+              <td class="fw-semibold">{{ a.enseignant.nom_complet }}</td>
+              <td><span class="badge bg-indigo me-1">{{ a.module.code }}</span>{{ a.module.libelle }}</td>
+              {% for t, val in [('CM', a.h_cm_attribuees), ('TD', a.h_td_attribuees), ('TP', a.h_tp_attribuees)] %}
+              <td class="text-center">
+                {% if val > 0 %}
+                <div class="small">{{ a.heures_effectuees(t) }}h / {{ val }}h</div>
+                <div class="progress mx-auto" style="height:6px;width:70px;">
+                  <div class="progress-bar bg-{{ 'success' if a.pct_service(t) < 100 else 'primary' }}"
+                       style="width:{{ a.pct_service(t) }}%"></div>
+                </div>
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              {% endfor %}
+              <td>
+                <form method="POST" action="{{ url_for('admin.affectation_delete', aid=a.id) }}"
+                      onsubmit="return confirm('Supprimer cette affectation ?')">
+                  {{ form.hidden_tag() }}
+                  <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr class="no-paginate empty-state"><td colspan="6" class="text-center text-muted py-5">Aucune affectation.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const affSearch = document.getElementById('searchAff');
+  const affSort = document.getElementById('sortAff');
+  const affTable = document.getElementById('affTable');
+
+  if (affTable) {
+    const tbody = affTable.querySelector('tbody');
+    
+    function applyAffFilters() {
+      const term = affSearch.value.toLowerCase();
+      const sort = affSort.value;
+      const rows = Array.from(tbody.querySelectorAll('tr:not(.no-paginate)'));
+      
+      // Tri
+      rows.sort((a, b) => {
+        if (sort === 'recent') {
+          return parseInt(b.dataset.id) - parseInt(a.dataset.id);
+        } else if (sort === 'alpha') {
+          return a.dataset.name.localeCompare(b.dataset.name);
+        }
+        return 0;
+      });
+      
+      rows.forEach(r => tbody.appendChild(r));
+      
+      // Filtrage
+      let visibleTotal = 0;
+      rows.forEach(r => {
+        const text = r.dataset.search;
+        if (text.includes(term)) {
+          r.dataset.filtered = 'false';
+          visibleTotal++;
+        } else {
+          r.dataset.filtered = 'true';
+        }
+      });
+      
+      // État vide
+      let emptyRow = tbody.querySelector('.no-paginate.empty-state');
+      if (visibleTotal === 0 && rows.length > 0) {
+        if (!emptyRow) {
+          emptyRow = document.createElement('tr');
+          emptyRow.className = 'no-paginate empty-state';
+          emptyRow.innerHTML = '<td colspan="6" class="text-center text-muted py-4">Aucun résultat.</td>';
+          tbody.appendChild(emptyRow);
+        }
+        emptyRow.style.display = '';
+      } else if (emptyRow) {
+        emptyRow.style.display = 'none';
+      }
+      
+      const affCount = document.getElementById('affCount');
+      if (affCount) affCount.textContent = visibleTotal;
+      if (affTable.updatePagination) affTable.updatePagination();
+    }
+    
+    affSearch.addEventListener('input', applyAffFilters);
+    affSort.addEventListener('change', applyAffFilters);
+  }
+});
+</script>
+{% endblock %}

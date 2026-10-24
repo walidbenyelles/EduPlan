@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Nouvelle Formation{% endblock %}
+{% block page_title %}Nouvelle Formation{% endblock %}
+{% block page_sub %}Créer une nouvelle formation{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-plus-circle-fill text-primary"></i>
+        <strong>Créer une nouvelle formation</strong>
+      </div>
+      <div class="card-body">
+        <form method="POST" novalidate>
+          {{ form.hidden_tag() }}
+          <div class="mb-3">
+            {{ form.nom.label(class="form-label fw-semibold") }}
+            {{ form.nom(class="form-control" + (" is-invalid" if form.nom.errors else "")) }}
+            {% for e in form.nom.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-12">
+              {{ form.nb_groupes.label(class="form-label fw-semibold") }}
+              {{ form.nb_groupes(class="form-control form-control-sm") }}
+            </div>
+          </div>
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-plus-circle me-1"></i> Créer
+            </button>
+            <a href="{{ url_for('admin.formation') }}" class="btn btn-outline-secondary">Annuler</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

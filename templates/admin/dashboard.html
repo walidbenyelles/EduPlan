@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}Tableau de bord{% endblock %}
+{% block page_title %}Tableau de bord{% endblock %}
+{% block page_sub %}Vue d'ensemble de la formation{% endblock %}
+
+{% block content %}
+{% if not formation %}
+<div class="alert alert-warning d-flex align-items-center gap-2">
+  <i class="bi bi-exclamation-triangle-fill fs-4"></i>
+  <div>Aucune formation configurée. <a href="{{ url_for('admin.formation') }}" class="alert-link">Configurer la formation</a> pour commencer.</div>
+</div>
+{% else %}
+
+<!-- KPI CARDS -->
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-xl-3">
+    <div class="kpi-card kpi-indigo">
+      <div class="kpi-icon"><i class="bi bi-journals"></i></div>
+      <div class="kpi-value">{{ modules|length }}</div>
+      <div class="kpi-label">Modules</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="kpi-card kpi-cyan">
+      <div class="kpi-icon"><i class="bi bi-calendar3"></i></div>
+      <div class="kpi-value">{{ nb_seances }}</div>
+      <div class="kpi-label">Séances planifiées</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="kpi-card kpi-green">
+      <div class="kpi-icon"><i class="bi bi-people-fill"></i></div>
+      <div class="kpi-value">{{ nb_enseignants }}</div>
+      <div class="kpi-label">Enseignants</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl-3">
+    <div class="kpi-card {% if alertes %}kpi-red{% else %}kpi-green{% endif %}">
+      <div class="kpi-icon"><i class="bi bi-{% if alertes %}exclamation-triangle-fill{% else %}check-circle-fill{% endif %}"></i></div>
+      <div class="kpi-value">{{ alertes|length }}</div>
+      <div class="kpi-label">Alertes actives</div>
+    </div>
+  </div>
+</div>
+
+<!-- ALERTES -->
+{% if alertes %}
+<div class="card border-danger mb-4 shadow-sm">
+  <div class="card-header bg-danger text-white d-flex align-items-center gap-2">
+    <i class="bi bi-exclamation-triangle-fill"></i>
+    <strong>Dépassements de quota détectés</strong>
+  </div>
+  <div class="card-body p-0">
+    <ul class="list-group list-group-flush">
+      {% for m in alertes %}
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        <div>
+          <span class="badge bg-danger me-2">{{ m.code }}</span>
+          <strong>{{ m.libelle }}</strong>
+        </div>
+        <div class="d-flex gap-2">
+          {% if m.h_cm_prevues > 0 and m.heures_planifiees('CM') > m.h_cm_prevues %}
+          <span class="badge bg-danger">CM: {{ m.heures_planifiees('CM') }}h / {{ m.h_cm_prevues }}h</span>
+          {% endif %}
+          {% if m.h_td_prevues > 0 and m.heures_planifiees('TD') > m.h_td_prevues %}
+          <span class="badge bg-warning text-dark">TD: {{ m.heures_planifiees('TD') }}h / {{ m.h_td_prevues }}h</span>
+          {% endif %}
+          {% if m.h_tp_prevues > 0 and m.heures_planifiees('TP') > m.h_tp_prevues %}
+          <span class="badge bg-orange">TP: {{ m.heures_planifiees('TP') }}h / {{ m.h_tp_prevues }}h</span>
+          {% endif %}
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+<!-- PROGRESSION PAR TYPE -->
+<div class="row g-3 mb-4">
+  {% for type_s, label, color in [('CM','Cours Magistraux','indigo'),('TD','Travaux Dirigés','cyan'),('TP','Travaux Pratiques','green')] %}
+  <div class="col-md-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="fw-semibold text-{{ color }}-600">{{ label }}</span>
+          <span class="badge bg-{{ color }}-soft text-{{ color }}-700">{{ type_s }}</span>
+        </div>
+        <div class="d-flex justify-content-between mb-1">
+          <small>{{ stats[type_s].planifiees }}h planifiées</small>
+          <small>{{ stats[type_s].prevues }}h prévues</small>
+        </div>
+        {% set pct = (stats[type_s].planifiees / stats[type_s].prevues * 100)|int if stats[type_s].prevues > 0 else 0 %}
+        <div class="progress" style="height:10px;">
+          <div class="progress-bar bg-{% if pct >= 100 %}danger{% elif pct >= 75 %}warning{% else %}success{% endif %}"
+               style="width:{{ [pct,100]|min }}%"></div>
+        </div>
+        <small class="text-muted">{{ pct }}% accompli</small>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- TABLEAU MODULES -->
+<div class="card shadow-sm">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-journals me-2"></i><strong>État des modules</strong></span>
+    <a href="{{ url_for('admin.modules') }}" class="btn btn-sm btn-outline-primary">Gérer</a>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Code</th><th>Module</th>
+          <th class="text-center">CM</th>
+          <th class="text-center">TD</th>
+          <th class="text-center">TP</th>
+          <th>Statut</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in modules %}
+        <tr>
+          <td><span class="badge bg-primary">{{ m.code }}</span></td>
+          <td>{{ m.libelle }}</td>
+          {% for t, h in [('CM', m.h_cm_prevues),('TD', m.h_td_prevues),('TP', m.h_tp_prevues)] %}
+          <td class="text-center">
+            {% if h > 0 %}
+            <div class="small">{{ m.heures_planifiees(t) }}h / {{ h }}h</div>
+            <div class="progress" style="height:6px;width:80px;margin:auto;">
+              <div class="progress-bar bg-{{ m.statut_type(t) }}" style="width:{{ m.pct_type(t) }}%"></div>
+            </div>
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          {% endfor %}
+          <td>
+            {% if m.has_alert() %}
+            <span class="badge bg-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>Dépassement</span>
+            {% else %}
+            <span class="badge bg-success"><i class="bi bi-check-circle-fill me-1"></i>OK</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-muted py-4">Aucun module. <a href="{{ url_for('admin.modules') }}">Ajouter un module</a></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
